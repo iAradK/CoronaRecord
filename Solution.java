@@ -57,12 +57,10 @@ public class Solution {
             pstmt.execute();
 
 
-            pstmt = connection.prepareStatement(" CREATE TABLE Empl_Lab \n" +
+            pstmt = connection.prepareStatement(" CREATE TABLE Empl_Lab_Keys \n" +
                     "(\n" +
                     "    Employee_id integer, \n" +
                     "    Lab_id integer, \n" +
-                    "    E_city text, \n" +
-                    "    L_city text, \n" +
                     "    Salary integer, \n" +
                     "    PRIMARY KEY (Employee_id, Lab_id),\n" +
                     "    FOREIGN KEY (Employee_id) REFERENCES Employee(id) ON DELETE CASCADE,\n" +
@@ -70,7 +68,6 @@ public class Solution {
                     "    CHECK (Salary > 0)\n" +
                     ")");
             pstmt.execute();
-
 
             pstmt = connection.prepareStatement(" CREATE TABLE Vac_Lab \n" +
                     "(\n" +
@@ -80,6 +77,14 @@ public class Solution {
                     "    FOREIGN KEY (Vaccine_id) REFERENCES Vaccine(id) ON DELETE CASCADE,\n" +
                     "    FOREIGN KEY (Lab_id) REFERENCES Lab(id) ON DELETE CASCADE\n" +
                     ")");
+            pstmt.execute();
+
+
+            pstmt = connection.prepareStatement(" CREATE VIEW Empl_Lab AS\n" +
+                    "SELECT el.Employee_id, el.Lab_id, el.Salary , l.Active," +
+                    "e.City_of_Birth AS E_city, l.City AS L_city" +
+                    " FROM Empl_Lab_Keys el, Employee e, Lab l" +
+                    "\tWHERE el.Lab_id = l.id AND el.Employee_id = e.id;\n");
             pstmt.execute();
 
             pstmt = connection.prepareStatement("CREATE VIEW tmp_vac AS\n" +
@@ -117,7 +122,7 @@ public class Solution {
             pstmt.execute();
             pstmt = connection.prepareStatement("DELETE FROM Vaccine CASCADE");
             pstmt.execute();
-            pstmt = connection.prepareStatement("DELETE FROM Empl_Lab CASCADE");
+            pstmt = connection.prepareStatement("DELETE FROM Empl_Lab_Keys CASCADE");
             pstmt.execute();
             pstmt = connection.prepareStatement("DELETE FROM Vac_Lab CASCADE");
             pstmt.execute();
@@ -149,9 +154,11 @@ public class Solution {
             pstmt.execute();
             pstmt = connection.prepareStatement("DROP TABLE IF EXISTS Vaccine CASCADE");
             pstmt.execute();
-            pstmt = connection.prepareStatement("DROP TABLE IF EXISTS Empl_Lab CASCADE");
+            pstmt = connection.prepareStatement("DROP TABLE IF EXISTS Empl_Lab_Keys CASCADE");
             pstmt.execute();
             pstmt = connection.prepareStatement("DROP TABLE IF EXISTS Vac_Lab CASCADE");
+            pstmt.execute();
+            pstmt = connection.prepareStatement("DROP VIEW IF EXISTS Empl_Lab\n");
             pstmt.execute();
             pstmt = connection.prepareStatement("DROP VIEW IF EXISTS tmp_vac\n");
             pstmt.execute();
@@ -507,30 +514,11 @@ public class Solution {
         PreparedStatement pstmt = null;
 
         try {
-            String emp_city_query = "(SELECT City_of_Birth FROM Employee WHERE id = " + employeeID + ")";
-            String lab_city_query = "(SELECT City FROM Lab WHERE id = " + labID + ")";
-
-            pstmt = connection.prepareStatement(emp_city_query);
-            ResultSet results = pstmt.executeQuery();
-            String emp_city = "";
-            if (results.next()) {
-                emp_city = results.getString("City_of_Birth");
-            }
-
-            pstmt = connection.prepareStatement(lab_city_query);
-            results = pstmt.executeQuery();
-            String lab_city = "";
-            if (results.next()) {
-                lab_city = results.getString("City");
-            }
-
-            pstmt = connection.prepareStatement("INSERT INTO Empl_Lab" +
-                    " VALUES (?, ?, ?, ?, ?)");
+            pstmt = connection.prepareStatement("INSERT INTO Empl_Lab_Keys" +
+                    " VALUES (?, ?, ?)");
             pstmt.setInt(1, employeeID);
             pstmt.setInt(2, labID);
-            pstmt.setString(3, emp_city);
-            pstmt.setString(4, lab_city);
-            pstmt.setInt(5, salary);
+            pstmt.setInt(3, salary);
             pstmt.execute();
 
         } catch (SQLException e) {
@@ -573,7 +561,7 @@ public class Solution {
         Connection connection = DBConnector.getConnection();
         PreparedStatement pstmt = null;
         try {
-            pstmt = connection.prepareStatement("DELETE FROM Empl_Lab WHERE Lab_id = (?)" +
+            pstmt = connection.prepareStatement("DELETE FROM Empl_Lab_Keys WHERE Lab_id = (?)" +
                     "AND Employee_id = (?)");
             pstmt.setInt(1, labID);
             pstmt.setInt(2, employeeID);
@@ -758,17 +746,13 @@ public class Solution {
             if (!exists) { // Vaccine does not exist
                 retVal = NOT_EXISTS;
             } else {
-                Vaccine vac = getVaccineProfile(vaccineID);
-                int cost = amount*vac.getCost();
-
                 pstmt = connection.prepareStatement("UPDATE Vaccine\n" +
-                        "\tSET Cost = Cost+(?), Productivity = Productivity+15, " +
-                        "Units_in_Stock = Units_in_Stock-(?), Money = Money+(?)\n" +
+                        "\tSET Cost = 2*Cost, Productivity = Productivity+15, " +
+                        "Units_in_Stock = Units_in_Stock-(?), Money = Money+Cost*(?)\n" +
                         "WHERE id = (?)");
-                pstmt.setInt(1, vac.getCost());
+                pstmt.setInt(1, amount);
                 pstmt.setInt(2, amount);
-                pstmt.setInt(3, cost);
-                pstmt.setInt(4, vac.getId());
+                pstmt.setInt(3, vaccineID);
 
                 pstmt.execute();
             }
@@ -818,14 +802,12 @@ public class Solution {
         }
 
         try {
-            Vaccine vac = getVaccineProfile(vaccineID);
-
             pstmt = connection.prepareStatement("UPDATE Vaccine\n" +
                     "\tSET Cost = Cost/2, Productivity = Productivity-15," +
                     " Units_in_Stock =  Units_in_Stock + (?)\n" +
                     "WHERE id = (?)");
             pstmt.setInt(1, amount);
-            pstmt.setInt(2, vac.getId());
+            pstmt.setInt(2, vaccineID);
             pstmt.execute();
         } catch (SQLException e) {
             // e.printStackTrace();
@@ -968,20 +950,13 @@ public class Solution {
         Connection connection = DBConnector.getConnection();
         PreparedStatement pstmt = null;
         try {
-            pstmt = connection.prepareStatement("SELECT Active FROM Lab WHERE  id = ?");
-            pstmt.setInt(1, labID);
-            ResultSet results = pstmt.executeQuery();
-            boolean b = false;
-            if (results.next()) b = results.getBoolean("Active");
-
             pstmt = connection.prepareStatement("SELECT SUM(Salary) AS Sal FROM Empl_Lab " +
-                    " WHERE Lab_id = (?) " + "AND ( true = ? ) AND " +
+                    " WHERE Lab_id = (?) " + "AND ( true = Active ) AND " +
                     " (1 < ( SELECT COUNT(Employee_id) FROM Empl_Lab WHERE Lab_id = (?) ) )");
 
             pstmt.setInt(1, labID);
-            pstmt.setBoolean(2, b);
-            pstmt.setInt(3, labID);
-            results = pstmt.executeQuery();
+            pstmt.setInt(2, labID);
+            ResultSet results = pstmt.executeQuery();
             results.next();
             sum = results.getInt("Sal");
             results.close();
