@@ -40,7 +40,7 @@ public class Solution {
                     "    Productivity  integer NOT NULL ,\n" +
                     "    Money integer DEFAULT 0 ,\n" +
                     "    PRIMARY KEY (id) ,\n" +
-                    "    CHECK (id > 0), CHECK (cost > 0), CHECK (Units_in_Stock > 0)," +
+                    "    CHECK (id > 0), CHECK (cost >= 0), CHECK (Units_in_Stock >= 0)," +
                     "    CHECK (Productivity >= 0), CHECK (Productivity <= 100) \n" +
                     ")");
             pstmt.execute();
@@ -65,7 +65,7 @@ public class Solution {
                     "    PRIMARY KEY (Employee_id, Lab_id),\n" +
                     "    FOREIGN KEY (Employee_id) REFERENCES Employee(id) ON DELETE CASCADE,\n" +
                     "    FOREIGN KEY (Lab_id) REFERENCES Lab(id) ON DELETE CASCADE,\n" +
-                    "    CHECK (Salary > 0)\n" +
+                    "    CHECK (Salary >= 0)\n" +
                     ")");
             pstmt.execute();
 
@@ -95,7 +95,6 @@ public class Solution {
 
         } catch (SQLException e) {
             e.printStackTrace();
-            //e.printStackTrace()();
         }
         finally {
             try {
@@ -142,6 +141,24 @@ public class Solution {
                 //e.printStackTrace()();
             }
         }
+    }
+
+    public static int getCost(Integer id) {
+        ReturnValue retVal = OK;
+        Connection connection = DBConnector.getConnection();
+        PreparedStatement pstmt = null;
+
+        int cost = -123;
+        try {
+            pstmt = connection.prepareStatement("SELECT Cost FROM Vaccine " +
+                    "WHERE id = (?)");
+            pstmt.setInt(1, id);
+            ResultSet rs = pstmt.executeQuery();
+            if (rs.next()) cost = rs.getInt("Cost");
+        } catch (SQLException throwables) {
+            return 0;
+        }
+        return cost;
     }
 
     public static void dropTables() {
@@ -196,7 +213,7 @@ public class Solution {
             pstmt.execute();
 
         } catch (SQLException e) {
-            e.printStackTrace();
+            // e.printStackTrace();
             switch (e.getSQLState()) {
                 case "23514":
                 case "23502":
@@ -522,8 +539,8 @@ public class Solution {
             pstmt.execute();
 
         } catch (SQLException e) {
-            String s = e.getSQLState();
-            e.printStackTrace();
+            // String s = e.getSQLState();
+            // e.printStackTrace();
             switch (e.getSQLState()) {
                 case "23514":
                 case "23502":
@@ -645,7 +662,7 @@ public class Solution {
             pstmt.setInt(2, vaccineID);
             if (pstmt.executeUpdate() == 0) retVal = NOT_EXISTS;
         } catch (SQLException e) {
-            e.printStackTrace();
+            // e.printStackTrace();
             switch (e.getSQLState()) {
                 case "23503":
                     retVal = NOT_EXISTS;
@@ -678,29 +695,20 @@ public class Solution {
         try {
             if (prod == 0) {
                 pstmt = connection.prepareStatement("UPDATE Vaccine\n" +
-                        "\tSET Cost = Cost/2, Productivity = Productivity-15," +
+                        "\tSET Cost = (Cost/2), Productivity = 0," +
                         " Units_in_Stock =  Units_in_Stock + (?)\n" +
                         "WHERE id = (?)");
-                pstmt.setInt(1, amount);
-                pstmt.setInt(2, vaccineID);
-            }
-            else {
-                int cost = -1;
-                pstmt = connection.prepareStatement("SELECT Cost From Vaccine WHERE id = (?) ");
-                pstmt.setInt(1, vaccineID);
-                ResultSet res = pstmt.executeQuery();
-                if (res.next()) cost = res.getInt("Cost");
 
-                pstmt = connection.prepareStatement("UPDATE Vaccine\n" +
-                        "\tSET Cost = Cost+(?), Productivity = (?), " +
-                        "Units_in_Stock = Units_in_Stock-(?), Money = Money+(?)\n" +
-                        "WHERE id = (?)");
-                pstmt.setInt(1, cost);
-                pstmt.setInt(2, prod);
-                pstmt.setInt(3, amount);
-                pstmt.setInt(4, cost*amount);
-                pstmt.setInt(5, vaccineID);
             }
+            else { // prod = 100
+                pstmt = connection.prepareStatement("UPDATE Vaccine\n" +
+                        "\tSET Cost = 2*Cost, Productivity = 100, " +
+                        "Units_in_Stock = Units_in_Stock-(?), Money = Money\n" +
+                        "WHERE id = (?)");
+                // pstmt.setInt(2, amount);
+            }
+            pstmt.setInt(1, amount);
+            pstmt.setInt(2, vaccineID);
             pstmt.execute();
         } catch (SQLException e) {
             // e.printStackTrace();
@@ -748,7 +756,7 @@ public class Solution {
             } else {
                 pstmt = connection.prepareStatement("UPDATE Vaccine\n" +
                         "\tSET Cost = 2*Cost, Productivity = Productivity+15, " +
-                        "Units_in_Stock = Units_in_Stock-(?), Money = Money+Cost*(?)\n" +
+                        "Units_in_Stock = Units_in_Stock-(?), Money = Money+(Cost*(?))\n" +
                         "WHERE id = (?)");
                 pstmt.setInt(1, amount);
                 pstmt.setInt(2, amount);
@@ -802,8 +810,18 @@ public class Solution {
         }
 
         try {
+            pstmt = connection.prepareStatement("SELECT * FROM Vaccine " +
+                    "WHERE id = (?)");
+            pstmt.setInt(1, vaccineID);
+            ResultSet rs = pstmt.executeQuery();
+            if (!rs.next()) return NOT_EXISTS;
+        } catch (SQLException throwables) {
+            return ERROR;
+        }
+
+        try {
             pstmt = connection.prepareStatement("UPDATE Vaccine\n" +
-                    "\tSET Cost = Cost/2, Productivity = Productivity-15," +
+                    "\tSET Cost = (Cost/2), Productivity = Productivity-15," +
                     " Units_in_Stock =  Units_in_Stock + (?)\n" +
                     "WHERE id = (?)");
             pstmt.setInt(1, amount);
@@ -811,6 +829,7 @@ public class Solution {
             pstmt.execute();
         } catch (SQLException e) {
             // e.printStackTrace();
+            String s = e.getSQLState();
             switch (e.getSQLState()) {
                 case "23514":
                 case "23502":
@@ -1095,15 +1114,18 @@ public class Solution {
         Connection connection = DBConnector.getConnection();
         PreparedStatement pstmt = null;
         try {
-            pstmt = connection.prepareStatement("SELECT id, Productivity + Units_in_Stock - Cost\n" +
+            pstmt = connection.prepareStatement("SELECT id, (Productivity + Units_in_Stock - Cost) " +
+                    "AS num\n" +
                     "FROM Vaccine\n" +
                     "GROUP BY id\n" +
-                    "ORDER BY Productivity + Units_in_Stock - Cost, id;");
+                    "ORDER BY num DESC, id ASC;");
 
             ResultSet results = pstmt.executeQuery();
             int counter = 0;
             while (results.next() && counter < 10) {
-                l.add(counter, results.getInt("id"));
+                int y = results.getInt("id");
+                l.add(counter, y);
+                int x = results.getInt("num");
                 counter++;
             }
             results.close();
