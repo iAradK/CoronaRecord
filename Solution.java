@@ -1150,27 +1150,53 @@ public class Solution {
     public static ArrayList<Integer> getCloseEmployees(Integer employeeID) {
         ArrayList<Integer> l = new ArrayList<>();
         Integer id = 0;
+
+        String get_num_of_emp_labs = "SELECT COUNT(Lab_id) FROM Empl_Lab WHERE (Employee_id = (?) )";
+        String get_list_emp_labs = "SELECT Lab_id FROM Empl_Lab WHERE (Employee_id = (?) )";
+        String s = "";
+
         Connection connection = DBConnector.getConnection();
         PreparedStatement pstmt = null;
         try {
-            String get_num_of_emp_labs = "SELECT COUNT(Lab_id) FROM Empl_Lab WHERE (Employee_id = (?) )";
-            String get_list_emp_labs = "SELECT Lab_id FROM Empl_Lab WHERE (Employee_id = (?) )";
-
-            String get_list_friend_labs = "SELECT e.id AS Employee_id, COUNT(el.Lab_id) AS num \n " +
-                    "FROM Empl_Lab el, Employee e " +
-                    "WHERE (" + get_num_of_emp_labs + ") = 0 OR " + "(el.Lab_id IN (" + get_list_emp_labs + " ) )"
-                    + "GROUP BY e.id\n";
-                    // + "HAVING e.id <> " + employeeID;
-
-            String s = "SELECT Employee_id, num FROM (" + get_list_friend_labs + ") foo\n" +
-                     "WHERE (" + get_num_of_emp_labs + ") = 0 OR " + " num*100/("+ get_num_of_emp_labs + ") > 50 ";
-
-            pstmt = connection.prepareStatement(get_list_friend_labs);
+            pstmt = connection.prepareStatement("SELECT * FROM Employee WHERE id = ?");
             pstmt.setInt(1, employeeID);
-            pstmt.setInt(2, employeeID);
-//            pstmt.setInt(3, employeeID);
-//            pstmt.setInt(4, employeeID);
             ResultSet results = pstmt.executeQuery();
+
+            if (!results.next()) { // No such employee
+                return l;
+            }
+
+            pstmt = connection.prepareStatement(get_list_emp_labs);
+            pstmt.setInt(1, employeeID);
+            results = pstmt.executeQuery();
+
+            if (!results.next()) { // No labs for employee
+                s = "SELECT id AS Employee_id FROM Employee WHERE id <> (?) \n" +
+                        "ORDER BY id ASC";
+                pstmt = connection.prepareStatement(s);
+                pstmt.setInt(1, employeeID);
+            }
+            else {
+                String get_list_friend_labs = "SELECT Employee_id, COUNT(Lab_id) AS num \n " +
+                        " FROM Empl_Lab \n" +
+                        " WHERE (" + get_num_of_emp_labs + ") = 0 OR " +
+                        " (Lab_id IN (" + get_list_emp_labs + " ) )" +
+                        " GROUP BY Employee_id\n" +
+                        " HAVING Employee_id <> " + employeeID;
+
+                s = "SELECT Employee_id, num FROM (" + get_list_friend_labs + ") foo\n" +
+                        " WHERE (" + get_num_of_emp_labs + ") = 0 OR " +
+                        " num*100/("+ get_num_of_emp_labs + ") >= 50 " +
+                        " ORDER BY Employee_id ASC";
+
+                pstmt = connection.prepareStatement(s);
+                pstmt.setInt(1, employeeID);
+                pstmt.setInt(2, employeeID);
+                pstmt.setInt(3, employeeID);
+                pstmt.setInt(4, employeeID);
+            }
+
+            results = pstmt.executeQuery();
 
             int counter = 0;
             while (results.next() && counter < 10) {
@@ -1178,6 +1204,29 @@ public class Solution {
                 // int lll = results.getInt("num");
                 counter++;
             }
+/*
+            ArrayList<Integer> l2 = new ArrayList<>();
+            pstmt = connection.prepareStatement(get_list_emp_labs);
+            pstmt.setInt(1, 2500);
+            results = pstmt.executeQuery();
+            counter = 0;
+            while (results.next() && counter < 10) {
+                l2.add(counter, results.getInt("Lab_id"));
+                // int lll = results.getInt("num");
+                counter++;
+            }
+
+            ArrayList<Integer> l3 = new ArrayList<>();
+            pstmt = connection.prepareStatement(get_list_emp_labs);
+            pstmt.setInt(1, 2600);
+            results = pstmt.executeQuery();
+
+            counter = 0;
+            while (results.next() && counter < 10) {
+                l3.add(counter, results.getInt("Lab_id"));
+                // int lll = results.getInt("num");
+                counter++;
+            }*/
             results.close();
         } catch (SQLException e) {
             e.printStackTrace();
